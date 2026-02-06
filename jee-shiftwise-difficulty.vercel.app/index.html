@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JEE 2026 Shift Analytics - Performance Alpha</title>
+    <!-- External Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-dark: #0d1117;
+            --card-bg: #161b22;
+            --border-color: #30363d;
+            --text-main: #c9d1d9;
+            --accent-blue: #58a6ff;
+            --top-tier: #f1e05a;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #30363d;
+            border-radius: 10px;
+        }
+
+        /* Premium Shift Card Design */
+
+        .shift-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border-color);
+            position: relative;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+        }
+
+        /* The Clean "Selected" State */
+
+        .shift-card.active {
+            background: #1c2128;
+            border-color: var(--accent-blue);
+            transform: translateX(8px);
+            /* Protrusion to show selection */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(88, 166, 255, 0.15);
+            /* Soft glow */
+        }
+
+        /* Blue Indicator Bar for Active Card */
+
+        .shift-card.active::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--accent-blue);
+            box-shadow: 2px 0 12px rgba(88, 166, 255, 0.6);
+            z-index: 10;
+        }
+
+        /* Subtle Hover */
+
+        .shift-card:not(.active):hover {
+            background: #1c2128;
+            border-color: #444c56;
+            transform: translateX(3px);
+        }
+
+        .rank-gradient {
+            background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
+        }
+
+        .top-tier-badge {
+            background: rgba(241, 224, 90, 0.1);
+            border: 1px solid rgba(241, 224, 90, 0.3);
+            color: #f1e05a;
+        }
+
+        canvas {
+            filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
+        }
+
+        .sort-toggle-btn {
+            background: #21262d;
+            border: 1px solid #30363d;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: bold;
+            color: #8b949e;
+            transition: all 0.2s;
+        }
+
+        .sort-toggle-btn.active {
+            background: #30363d;
+            color: #58a6ff;
+            border-color: #58a6ff;
+        }
+
+        .line-toggle-checkbox {
+            cursor: pointer;
+            accent-color: var(--accent-blue);
+        }
+
+        .predictor-input:focus {
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
+            border-color: var(--accent-blue);
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-8">
+    <div class="max-w-[1600px] mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-gray-800 pb-6">
+            <div>
+                <h1 class="text-3xl font-extrabold text-white tracking-tight">JEE <span class="text-blue-500">Alpha Dashboard</span></h1>
+                <p class="text-gray-400 mt-1">Ranking: Strict Mean | <span id="sync-status" class="text-yellow-500 italic">Connecting...</span></p>
+            </div>
+            <div class="mt-4 md:mt-0 flex gap-6">
+                <div class="text-right">
+                    <p class="text-[10px] uppercase font-bold text-gray-500 tracking-widest">Total Students (Current Sample)</p>
+                    <p id="total-students-count" class="text-2xl font-mono font-bold text-white">0</p>
+                </div>
+                <button id="refresh-btn" class="bg-gray-800 p-3 rounded-lg hover:bg-gray-700 transition-all border border-gray-700">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Top Level Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-[#161b22] p-5 rounded-xl border border-gray-800 shadow-md">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Hardest Shift (Lowest Mean)</p>
+                <p id="hardest-shift" class="text-xl font-bold text-red-500 mt-1">---</p>
+                <div class="flex gap-4 mt-3 pt-2 border-t border-gray-800/50">
+                    <div>
+                        <p class="text-[9px] text-gray-500 uppercase font-bold">Mean</p>
+                        <p id="hardest-mean-val" class="text-sm font-mono text-white">--</p>
+                    </div>
+                    <div>
+                        <p class="text-[9px] text-gray-500 uppercase font-bold">Median</p>
+                        <p id="hardest-median-val" class="text-sm font-mono text-white">--</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="subject-toughest-card" class="bg-[#161b22] p-5 rounded-xl border border-purple-900/30 shadow-md cursor-pointer hover:bg-gray-800 transition-colors relative overflow-hidden group">
+                <div class="absolute right-2 top-2 opacity-20 group-hover:opacity-100 transition-opacity">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z"></path></svg>
+                </div>
+                <p id="subject-tough-label" class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Physics Toughest</p>
+                <p id="subject-tough-val" class="text-xl font-bold text-white mt-1">---</p>
+                <div class="flex gap-4 mt-3 pt-2 border-t border-gray-800/50">
+                    <div>
+                        <p class="text-[9px] text-gray-500 uppercase font-bold">Sub Avg</p>
+                        <p id="subject-avg-val" class="text-sm font-mono text-white">--</p>
+                    </div>
+                    <div>
+                        <p class="text-[9px] text-gray-500 uppercase font-bold">Shift Med</p>
+                        <p id="subject-total-med" class="text-sm font-mono text-white">--</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-[#161b22] p-5 rounded-xl border border-gray-800 shadow-md">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Global 150+ Ratio</p>
+                <p id="global-top-ratio" class="text-xl font-bold text-yellow-500 mt-1">---</p>
+                <p class="text-[9px] text-gray-500 mt-1 uppercase tracking-tight">Across all shifts</p>
+            </div>
+            <div class="bg-[#161b22] p-5 rounded-xl border border-gray-800 shadow-md">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Avg Shift Median</p>
+                <p id="global-median" class="text-xl font-bold text-blue-400 mt-1">---</p>
+                <p class="text-[9px] text-gray-500 mt-1 uppercase tracking-tight">Benchmark middle score</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- Sidebar -->
+            <div class="lg:col-span-3">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-sm font-bold text-gray-500 uppercase tracking-tighter">Shift Ranking</h3>
+                    <span class="text-[10px] text-blue-400 font-bold uppercase">Strict Mean</span>
+                </div>
+                <div id="leaderboard" class="space-y-3 max-h-[1100px] overflow-y-auto pr-3 custom-scrollbar">
+                    <!-- Cards injected via script.js -->
+                </div>
+            </div>
+
+            <!-- Analysis Section -->
+            <div class="lg:col-span-9 space-y-6">
+                <!-- Main Comparison Chart -->
+                <div class="bg-[#161b22] p-6 rounded-2xl border border-gray-800 shadow-2xl">
+                    <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
+                        <div>
+                            <h3 class="text-lg font-bold text-white">Performance Analytics</h3>
+                            <p class="text-xs text-gray-500">Benchmark predictors vs shift averages</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-4">
+                            <div class="flex gap-3 bg-gray-900 p-1.5 px-3 rounded-lg border border-gray-800 text-[10px] font-bold uppercase text-gray-400">
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-white">
+                                    <input type="checkbox" id="toggle-150-line" class="line-toggle-checkbox" checked> 150+ %
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-white">
+                                    <input type="checkbox" id="toggle-99-line" class="line-toggle-checkbox" checked> 99%ile
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-white">
+                                    <input type="checkbox" id="toggle-98-line" class="line-toggle-checkbox" checked> 98%ile
+                                </label>
+                            </div>
+                            <div class="flex bg-gray-900 p-1 rounded-lg border border-gray-800">
+                                <button id="sort-mean-btn" class="sort-toggle-btn">By Mean</button>
+                                <button id="sort-date-btn" class="sort-toggle-btn active">By Date</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-[380px]">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- 1. Population Spread (Left) -->
+                    <div class="bg-[#161b22] p-4 md:p-6 rounded-2xl border border-gray-800 shadow-xl overflow-hidden flex flex-col">
+                        <div class="flex flex-col sm:flex-row justify-between items-start mb-4 gap-2">
+                            <div>
+                                <h3 class="text-base md:text-lg font-bold">Population Spread: <span id="dist-shift-id" class="text-blue-500"></span></h3>
+                                <p class="text-[10px] md:text-xs text-gray-500 mt-1" id="dist-sample-size"></p>
+                            </div>
+                            <div class="flex flex-col items-end gap-1">
+                                <div id="top-tier-stat" class="px-2 py-1 rounded-lg top-tier-badge text-[10px] font-bold">---</div>
+                                <div class="flex gap-1 mt-1">
+                                    <div id="predicted-99-stat" class="px-2 py-1 rounded-lg bg-red-900/20 border border-red-900/40 text-red-400 text-[10px] font-bold">---</div>
+                                    <div id="predicted-98-stat" class="px-2 py-1 rounded-lg bg-orange-900/20 border border-orange-900/40 text-orange-400 text-[10px] font-bold">---</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="h-[200px] w-full mb-4">
+                            <canvas id="distChart"></canvas>
+                        </div>
+
+                        <!-- Percentile Predictor Widget -->
+                        <div class="mt-auto pt-4 border-t border-gray-800">
+                            <div class="flex justify-between items-center mb-3">
+                                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Personal Percentile Predictor</p>
+                                <span class="text-[8px] text-gray-600 bg-gray-900 px-1.5 py-0.5 rounded border border-gray-800">AI Model Alpha</span>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="relative flex-1">
+                                    <input type="number" id="user-marks-input" placeholder="Enter Score (0-300)" class="predictor-input bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm w-full focus:outline-none text-white placeholder-gray-600 transition-all" min="0" max="300">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-600 uppercase">Marks</span>
+                                </div>
+                                <div class="min-w-[130px] bg-blue-900/10 border border-blue-500/20 rounded-lg flex flex-col items-center justify-center p-1">
+                                    <p class="text-[8px] font-bold text-blue-400/60 uppercase leading-none mb-1">Estimated %ile</p>
+                                    <div id="predicted-percentile-display" class="text-xl font-mono font-bold text-blue-400 leading-none">---</div>
+                                </div>
+                            </div>
+                            <p class="text-[8px] text-gray-600 mt-2 italic leading-tight">*Calculated using localized exponential interpolation with a sample-bias correction factor.</p>
+                        </div>
+                    </div>
+
+                    <!-- 2. Subject Ranking Chart (Right) -->
+                    <div class="bg-[#161b22] p-6 rounded-2xl border border-gray-800 shadow-xl">
+                        <h3 class="text-lg font-bold mb-4 text-gray-300">Subject-wise Difficulty Stack</h3>
+                        <div class="h-[300px]">
+                            <canvas id="subjectChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Subject Difficulty Standings -->
+                <div class="bg-[#161b22] p-6 rounded-2xl border border-gray-800 shadow-xl">
+                    <h3 class="text-lg font-bold mb-6 text-white uppercase tracking-widest text-center">Subject Difficulty Standings</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-purple-400 uppercase text-center border-b border-purple-900 pb-2">Hardest Physics</h4>
+                            <div id="physics-rankings" class="space-y-2"></div>
+                        </div>
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-green-400 uppercase text-center border-b border-green-900 pb-2">Hardest Chemistry</h4>
+                            <div id="chemistry-rankings" class="space-y-2"></div>
+                        </div>
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-red-400 uppercase text-center border-b border-red-900 pb-2">Hardest Maths</h4>
+                            <div id="maths-rankings" class="space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Linking the external JavaScript file -->
+    <script src="script.js"></script>
+</body>
+
+</html>
